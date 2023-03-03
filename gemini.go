@@ -9,27 +9,79 @@ import (
 )
 
 type Api struct {
-	url    string
-	key    string
-	secret string
+	SandBox bool
+	Key     string
+	Secret  string
+	BaseURL string
 }
 
-type TickerV2DAO struct {
-	Symbol  string   `json:"symbol"`
-	Open    float64  `json:"open,string"`
-	High    float64  `json:"high,string"`
-	Low     float64  `json:"low,string"`
-	Close   float64  `json:"close,string"`
-	Changes []string `json:"changes"`
-	Bid     float64  `json:"bid,string"`
-	Ask     float64  `json:"ask,string"`
+func (api *Api) GetGeminiEnv() EnvResponse {
+	var envRes EnvResponse
+	if api.SandBox {
+		envRes.Message = "IN SANDBOX"
+	}
+
+	envRes.Message = "NOT IN SANDBOX"
+
+	return envRes
+}
+
+func (api *Api) GetSymbols() ([]string, error) {
+	symbolsURIPath := "v1/symbols"
+
+	url := api.BaseURL + symbolsURIPath
+
+	fmt.Printf("url is %v", url)
+
+	// setup the request
+	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer([]byte{}))
+
+	if err != nil {
+		fmt.Printf("ERROR IN CLIENT DO is %v\n", err)
+		return nil, err
+	}
+
+	client := &http.Client{}
+	res, err := client.Do(req)
+
+	if err != nil {
+		return nil, err
+	}
+
+	// catch errors in the response
+	if res.StatusCode >= 400 && res.StatusCode <= 499 {
+		return nil, fmt.Errorf("%v\n%s", res.StatusCode, "something went wrong")
+	}
+
+	defer res.Body.Close()
+
+	// read response body
+	body, err := ioutil.ReadAll(res.Body)
+
+	if err != nil {
+		fmt.Printf("ERROR IN READ ALL is %v\n", err)
+
+		return nil, err
+	}
+
+	// var symbolsDAO []string
+	var symbolsDAO []string
+
+	// turn body data into struc
+	if err := json.Unmarshal(body, &symbolsDAO); err != nil {
+		fmt.Printf("ERROR IN UNMARSHALL is %v\n", err)
+
+		return nil, err
+	}
+
+	return symbolsDAO, nil
+
 }
 
 func (api *Api) GetCoinTicker(coinSymbol string) (TickerV2DAO, error) {
-	tickerURI := "ticker/"
-	baseURL := "https://api.gemini.com/v2/"
+	tickerURIPath := "v2/ticker/"
 
-	url := baseURL + tickerURI + coinSymbol
+	url := api.BaseURL + tickerURIPath + coinSymbol
 
 	// setup the request
 	req, err := http.NewRequest(http.MethodGet, url, bytes.NewBuffer([]byte{}))
@@ -64,17 +116,25 @@ func (api *Api) GetCoinTicker(coinSymbol string) (TickerV2DAO, error) {
 
 	// turn body data into struc
 	if err := json.Unmarshal(body, &tickerDAO); err != nil {
-		return TickerV2DAO{}, err
+		return tickerDAO, err
 	}
 
 	return tickerDAO, nil
 
 }
 
-func New(url string, key string, secret string) *Api {
+func New(isSandBox bool, key string, secret string) *Api {
+
+	baseURL := "https://api.gemini.com/"
+
+	if isSandBox {
+		baseURL = "https://api.sandbox.gemini.com/"
+	}
+
 	return &Api{
-		url:    url,
-		key:    key,
-		secret: secret,
+		SandBox: isSandBox,
+		Key:     key,
+		Secret:  secret,
+		BaseURL: baseURL,
 	}
 }
